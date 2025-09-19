@@ -164,7 +164,7 @@ def xlsm_to_html(xlsm_file: str, worksheet_name: str = "Database") -> str:
         data1 = extract_range(sheet, 1, 18, 1, 2)  # Basic info section
         data2 = extract_range(sheet, 8, 50, 3, 6)  # Main data section
 
-        html_content = "<html><head><style>table {border-collapse: collapse; margin: 20px 0;} td, th {padding: 8px; text-align: left;}</style></head><body>\n"
+        html_content = "<html><head><style>table {border-collapse: collapse; margin: 20px 0; table-layout: fixed; width: 100%; max-width: 800px;} td, th {padding: 4px; text-align: left; word-wrap: break-word; overflow-wrap: break-word; max-width: 200px;}</style></head><body>\n"
         html_content += html_table(data1, "Section 1: Basic Information (A1:B18)")
         html_content += html_table(data2, "Section 2: Data Section (C8:I50)")
         html_content += "</body></html>"
@@ -339,7 +339,7 @@ def setup_environment(config: Config) -> None:
         except FileExistsError:
             print("Folder already exists...")
         except Exception as e:
-            print(f"{e}")               
+            print(f"{e}")
 
         print("Environment setup completed successfully")
         print(
@@ -412,5 +412,3 @@ except Exception as e:
     raise
 
 # COMMAND ----------
-
-
