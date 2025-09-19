@@ -12,6 +12,10 @@ This solution processes Microsoft Excel files by:
 
 **Use Case**: R&D and experiment files with complex structured content, multiple tables, or variable formats that are difficult to parse directly. Converting to PDF enables consistent OCR processing and information extraction without custom parsing logic for each file variant.
 
+https://docs.databricks.com/aws/en/machine-learning/reference-solutions/images-etl-inference#workflow-for-image-model-inferencing
+
+Why not ingest binaries to a Delta table? The reasoning is because these files are likely intended for PDF processing by AgentBricks, so we want to write them out to start.
+
 ## Setup
 
 ### Prerequisites
@@ -40,9 +44,12 @@ This solution processes Microsoft Excel files by:
 ## Usage
 
 1. **Setup volumes and permissions**:
+Of course, the source schema and volume are only needed if the landing zone doesn't already exist.
+
    ```sql
    CREATE SCHEMA IF NOT EXISTS my_catalog.raw_data;
    CREATE VOLUME IF NOT EXISTS my_catalog.raw_data.excel_files;
+   CREATE SCHEMA IF NOT EXISTS my_catalog.processed_data;
    CREATE VOLUME IF NOT EXISTS my_catalog.processed_data.pdf_files;
    ```
 
