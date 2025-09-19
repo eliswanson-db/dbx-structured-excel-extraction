@@ -115,7 +115,7 @@ def extract_range(
 
 def html_table(data: List[List[Any]], title: str) -> str:
     """
-    Convert data to HTML table format.
+    Convert data to HTML table format with explicit column widths.
 
     Args:
         data: List of lists containing table data
@@ -124,13 +124,26 @@ def html_table(data: List[List[Any]], title: str) -> str:
     Returns:
         HTML string representation of the table
     """
-    html = f"<h2>{title}</h2><table border='1'>\n"
+    if not data:
+        return f"<h2>{title}</h2><p>No data</p>\n"
+
+    num_cols = len(data[0]) if data else 0
+    col_width = f"{100//num_cols}%" if num_cols > 0 else "100%"
+
+    html = f"<h2>{title}</h2><table border='1' style='table-layout: fixed; width: 100%; max-width: 800px;'>\n"
+    html += "<colgroup>\n"
+    for _ in range(num_cols):
+        html += f"<col style='width: {col_width};'>\n"
+    html += "</colgroup>\n"
+
     for row in data:
-        html += (
-            "<tr>"
-            + "".join(f"<td>{cell if cell is not None else ''}</td>" for cell in row)
-            + "</tr>\n"
-        )
+        html += "<tr>"
+        for cell in row:
+            cell_content = str(cell) if cell is not None else ""
+            html += (
+                f"<td style='word-wrap: break-word; padding: 4px;'>{cell_content}</td>"
+            )
+        html += "</tr>\n"
     html += "</table>\n"
     return html
 
@@ -164,7 +177,7 @@ def xlsm_to_html(xlsm_file: str, worksheet_name: str = "Database") -> str:
         data1 = extract_range(sheet, 1, 18, 1, 2)  # Basic info section
         data2 = extract_range(sheet, 8, 50, 3, 6)  # Main data section
 
-        html_content = "<html><head><style>table {border-collapse: collapse; margin: 20px 0; table-layout: fixed; width: 100%; max-width: 800px;} td, th {padding: 4px; text-align: left; word-wrap: break-word; overflow-wrap: break-word; max-width: 200px;}</style></head><body>\n"
+        html_content = "<html><head><style>table {border-collapse: collapse; margin: 20px 0;} td {text-align: left;} h2 {margin-top: 30px; margin-bottom: 10px;}</style></head><body>\n"
         html_content += html_table(data1, "Section 1: Basic Information (A1:B18)")
         html_content += html_table(data2, "Section 2: Data Section (C8:I50)")
         html_content += "</body></html>"
