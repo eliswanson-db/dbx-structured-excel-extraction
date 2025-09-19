@@ -162,7 +162,7 @@ def xlsm_to_html(xlsm_file: str, worksheet_name: str = "Database") -> str:
 
         # Extract predefined ranges for data
         data1 = extract_range(sheet, 1, 18, 1, 2)  # Basic info section
-        data2 = extract_range(sheet, 8, 50, 3, 9)  # Main data section
+        data2 = extract_range(sheet, 8, 50, 3, 6)  # Main data section
 
         html_content = "<html><head><style>table {border-collapse: collapse; margin: 20px 0;} td, th {padding: 8px; text-align: left;}</style></head><body>\n"
         html_content += html_table(data1, "Section 1: Basic Information (A1:B18)")
@@ -225,10 +225,11 @@ def make_converter_udf(dest_path: str, worksheet_name: str):
             filename = os.path.basename(file_path)
             base_name = os.path.splitext(filename)[0]
             pdf_filename = f"{base_name}.pdf"
-            dest_file_path = os.path.join(dest_path, pdf_filename)
+            dest_file_path = os.path.join(dest_path, pdf_filename).replace("dbfs:", "")
+            source_file_path = file_path.replace("dbfs:", "")
 
             # Convert Excel to HTML then to PDF
-            html_content = xlsm_to_html(file_path, worksheet_name)
+            html_content = xlsm_to_html(source_file_path, worksheet_name)
             pdf_bytes = html_to_pdf_bytes(html_content)
 
             # Write PDF to destination
@@ -409,3 +410,7 @@ try:
 except Exception as e:
     print(f"Pipeline failed with error: {e}")
     raise
+
+# COMMAND ----------
+
+
