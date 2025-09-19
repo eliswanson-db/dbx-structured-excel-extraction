@@ -332,8 +332,13 @@ def setup_environment(config: Config) -> None:
         )
 
         # Create destination directories
-        create_dest_directory(config.dest_path)
-        create_dest_directory(config.checkpoint_folder)
+        try:
+            os.makedirs(config.dest_path)
+            os.makedirs(config.checkpoint_folder)
+        except FileExistsError:
+            print("Folder already exists...")
+        except Exception as e:
+            print(f"{e}")               
 
         print("Environment setup completed successfully")
         print(
