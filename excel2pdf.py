@@ -38,8 +38,41 @@ dest_subfolder = dbutils.widgets.get("dest_subfolder")
 dest_metadata_table = dbutils.widgets.get("dest_metadata_table")
 default_worksheet_name = dbutils.widgets.get("worksheet_name")
 
-result_schema = StructType([StructField("dest_path", StringType(), True)])
+# Configure table extraction ranges
+# Commented out sections you can add if you want additional data sections. 
+# Each will show up on another page in the PDF.
+table_configs = {
+    "Section 1: Basic Information": {
+        "min_row": 1,
+        "max_row": 18,
+        "min_col": 1,
+        "max_col": 2,
+        "page_break": False,
+    },
+    "Section 2: Data Section": {
+        "min_row": 8,
+        "max_row": 50,
+        "min_col": 3,
+        "max_col": 6,
+        "page_break": True,
+    },
+    # "Section 3: Data Section": {
+    #     "min_row": 8,
+    #     "max_row": 50,
+    #     "min_col": 7,
+    #     "max_col": 9,
+    #     "page_break": True,
+    # },
+    # "Section 4: Data Section": {
+    #     "min_row": 8,
+    #     "max_row": 50,
+    #     "min_col": 10,
+    #     "max_col": 12,
+    #     "page_break": True,
+    # },
+}
 
+result_schema = StructType([StructField("dest_path", StringType(), True)])
 
 @dataclass
 class Config:
@@ -53,6 +86,7 @@ class Config:
     dest_subfolder: str
     dest_metadata_table: str
     worksheet_name: str
+    table_configs: dict
 
     @property
     def source_path(self) -> str:
@@ -84,6 +118,7 @@ config = Config(
     dest_subfolder=dest_subfolder,
     dest_metadata_table=dest_metadata_table,
     worksheet_name=default_worksheet_name,
+    table_configs=table_configs,
 )
 
 # COMMAND ----------
@@ -113,35 +148,49 @@ def extract_range(
     ]
 
 
-def html_table(data: List[List[Any]], title: str) -> str:
+def html_table(data: List[List[Any]], title: str, page_break: bool = False) -> str:
     """
-    Convert data to HTML table format.
+    Convert data to HTML table format with fixed pixel column widths.
 
     Args:
         data: List of lists containing table data
         title: Title for the table section
+        page_break: Whether to add a page break before this table
 
     Returns:
         HTML string representation of the table
     """
-    html = f"<h2>{title}</h2><table border='1'>\n"
+    if not data:
+        return f"<h2>{title}</h2><p>No data</p>\n"
+
+    num_cols = len(data[0]) if data else 0
+    table_width = 600  # Fixed total width in pixels
+    col_width = table_width // num_cols if num_cols > 0 else table_width
+
+    page_break_style = "page-break-before: always;" if page_break else ""
+    html = f"<h2 style='{page_break_style}'>{title}</h2>\n"
+    html += f"<table border='1' style='table-layout: fixed; width: {table_width}px; border-collapse: collapse;'>\n"
+
     for row in data:
-        html += (
-            "<tr>"
-            + "".join(f"<td>{cell if cell is not None else ''}</td>" for cell in row)
-            + "</tr>\n"
-        )
+        html += "<tr>"
+        for cell in row:
+            cell_content = str(cell) if cell is not None else ""
+            html += f"<td style='width: {col_width}px; max-width: {col_width}px; word-wrap: break-word; padding: 2px 4px; line-height: 1.2; overflow: hidden; vertical-align: top;'>{cell_content}</td>"
+        html += "</tr>\n"
     html += "</table>\n"
     return html
 
 
-def xlsm_to_html(xlsm_file: str, worksheet_name: str = "Database") -> str:
+def xlsm_to_html(
+    xlsm_file: str, worksheet_name: str = "Database", table_configs: dict = None
+) -> str:
     """
-    Convert Excel file to HTML format by extracting specific ranges.
+    Convert Excel file to HTML format by extracting configurable ranges.
 
     Args:
         xlsm_file: Path to the Excel file
         worksheet_name: Name of the worksheet to extract data from
+        table_configs: Dictionary defining table extraction ranges
 
     Returns:
         HTML string containing formatted tables
@@ -160,13 +209,33 @@ def xlsm_to_html(xlsm_file: str, worksheet_name: str = "Database") -> str:
 
         sheet = workbook[worksheet_name]
 
-        # Extract predefined ranges for data
-        data1 = extract_range(sheet, 1, 18, 1, 2)  # Basic info section
-        data2 = extract_range(sheet, 8, 50, 3, 9)  # Main data section
+        # Use default table config if none provided - single table with 20 rows, 5 columns
+        if table_configs is None:
+            table_configs = {
+                "Data Table": {
+                    "min_row": 1,
+                    "max_row": 20,
+                    "min_col": 1,
+                    "max_col": 5,
+                    "page_break": False,
+                }
+            }
 
-        html_content = "<html><head><style>table {border-collapse: collapse; margin: 20px 0;} td, th {padding: 8px; text-align: left;}</style></head><body>\n"
-        html_content += html_table(data1, "Section 1: Basic Information (A1:B18)")
-        html_content += html_table(data2, "Section 2: Data Section (C8:I50)")
+        html_content = "<html><head><style>table {border-collapse: collapse; margin: 20px 0;} td {text-align: left;} h2 {margin-top: 30px; margin-bottom: 10px;}</style></head><body>\n"
+
+        # Extract and generate HTML for each configured table
+        for title, config in table_configs.items():
+            data = extract_range(
+                sheet,
+                config["min_row"],
+                config["max_row"],
+                config["min_col"],
+                config["max_col"],
+            )
+            html_content += html_table(
+                data, title, page_break=config.get("page_break", False)
+            )
+
         html_content += "</body></html>"
 
         workbook.close()
@@ -195,13 +264,14 @@ def html_to_pdf_bytes(html_content: str) -> bytes:
     return output_buffer.getvalue()
 
 
-def make_converter_udf(dest_path: str, worksheet_name: str):
+def make_converter_udf(dest_path: str, worksheet_name: str, table_configs: dict):
     """
     Higher-order function returning pandas UDF for Excel to PDF conversion.
 
     Args:
         dest_path: Destination directory path for PDF files
         worksheet_name: Name of Excel worksheet to process
+        table_configs: Dictionary defining table extraction ranges
 
     Returns:
         Pandas UDF function for converting Excel files to PDF
@@ -225,10 +295,11 @@ def make_converter_udf(dest_path: str, worksheet_name: str):
             filename = os.path.basename(file_path)
             base_name = os.path.splitext(filename)[0]
             pdf_filename = f"{base_name}.pdf"
-            dest_file_path = os.path.join(dest_path, pdf_filename)
+            dest_file_path = os.path.join(dest_path, pdf_filename).replace("dbfs:", "")
+            source_file_path = file_path.replace("dbfs:", "")
 
             # Convert Excel to HTML then to PDF
-            html_content = xlsm_to_html(file_path, worksheet_name)
+            html_content = xlsm_to_html(source_file_path, worksheet_name, table_configs)
             pdf_bytes = html_to_pdf_bytes(html_content)
 
             # Write PDF to destination
@@ -276,7 +347,9 @@ def process_files(config: Config, excel_stream: DataFrame) -> DataFrame:
     Returns:
         DataFrame with processing results and destination paths
     """
-    convert_files_udf = make_converter_udf(config.dest_path, config.worksheet_name)
+    convert_files_udf = make_converter_udf(
+        config.dest_path, config.worksheet_name, config.table_configs
+    )
     return (
         excel_stream.withColumn("result", convert_files_udf(col("path")))
         .withColumn("dest_path", col("result.dest_path"))
@@ -332,8 +405,13 @@ def setup_environment(config: Config) -> None:
         )
 
         # Create destination directories
-        create_dest_directory(config.dest_path)
-        create_dest_directory(config.checkpoint_folder)
+        try:
+            os.makedirs(config.dest_path)
+            os.makedirs(config.checkpoint_folder)
+        except FileExistsError:
+            print("Folder already exists...")
+        except Exception as e:
+            print(f"{e}")
 
         print("Environment setup completed successfully")
         print(
@@ -404,3 +482,5 @@ try:
 except Exception as e:
     print(f"Pipeline failed with error: {e}")
     raise
+
+# COMMAND ----------
