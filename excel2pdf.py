@@ -38,9 +38,11 @@ dest_subfolder = dbutils.widgets.get("dest_subfolder")
 dest_metadata_table = dbutils.widgets.get("dest_metadata_table")
 default_worksheet_name = dbutils.widgets.get("worksheet_name")
 
+result_schema = StructType([StructField("dest_path", StringType(), True)])
+
 
 @dataclass
-class ProfilerConfig:
+class Config:
     """Configuration class for Excel to PDF processing."""
 
     catalog_name: str
@@ -73,7 +75,7 @@ class ProfilerConfig:
         return f"{self.dest_path}/checkpoints"
 
 
-config = ProfilerConfig(
+config = Config(
     catalog_name=catalog_name,
     source_schema=source_schema,
     source_volume=source_volume,
@@ -159,7 +161,6 @@ def xlsm_to_html(xlsm_file: str, worksheet_name: str = "Database") -> str:
         sheet = workbook[worksheet_name]
 
         # Extract predefined ranges for data
-        # TODO: These ranges should be configurable, but it would require some extra logic.
         data1 = extract_range(sheet, 1, 18, 1, 2)  # Basic info section
         data2 = extract_range(sheet, 8, 50, 3, 9)  # Main data section
 
@@ -192,24 +193,6 @@ def html_to_pdf_bytes(html_content: str) -> bytes:
         raise RuntimeError("Error converting HTML to PDF")
 
     return output_buffer.getvalue()
-
-
-def create_dest_directory(dest_path: str) -> None:
-    """
-    Create destination directory if it doesn't exist.
-
-    Args:
-        dest_path: Path to create
-
-    Raises:
-        OSError: If directory creation fails
-    """
-    os.makedirs(dest_path, exist_ok=True)
-
-
-# Schema for the pandas UDF output
-# TODO: Can just simplify the pandas udf to return a single string.
-result_schema = StructType([StructField("dest_path", StringType(), True)])
 
 
 def make_converter_udf(dest_path: str, worksheet_name: str):
@@ -273,8 +256,7 @@ def read_bronze_excel_stream(source_path: str) -> DataFrame:
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "binaryFile")
         .option("cloudFiles.useNotifications", "false")
-        .option("cloudFiles.includeExistingFiles", "true")  # TODO: Is this needed?
-        # .option("cloudFiles.maxFilesPerTrigger", "10")  # TODO: Limit batch size for stability. Disable for now.
+        .option("cloudFiles.includeExistingFiles", "true")
         .load(source_path)
         .select("modificationTime", "path", "length")
         .filter(
@@ -283,7 +265,7 @@ def read_bronze_excel_stream(source_path: str) -> DataFrame:
     )
 
 
-def process_files(config: ProfilerConfig, excel_stream: DataFrame) -> DataFrame:
+def process_files(config: Config, excel_stream: DataFrame) -> DataFrame:
     """
     Process Excel files by converting them to PDF format.
 
@@ -303,7 +285,7 @@ def process_files(config: ProfilerConfig, excel_stream: DataFrame) -> DataFrame:
     )
 
 
-def write_stream(processed_stream: DataFrame, config: ProfilerConfig) -> None:
+def write_stream(processed_stream: DataFrame, config: Config) -> None:
     """
     Write processed stream to the destination table.
 
@@ -323,7 +305,7 @@ def write_stream(processed_stream: DataFrame, config: ProfilerConfig) -> None:
     query.awaitTermination()
 
 
-def setup_environment(config: ProfilerConfig) -> None:
+def setup_environment(config: Config) -> None:
     """
     Set up the processing environment by creating necessary volumes and directories.
 
@@ -364,7 +346,7 @@ def setup_environment(config: ProfilerConfig) -> None:
         raise RuntimeError(f"Failed to setup environment: {str(e)}")
 
 
-def main(config: ProfilerConfig) -> None:
+def main(config: Config) -> None:
     """
     Main processing function to orchestrate Excel to PDF conversion.
 
@@ -380,7 +362,7 @@ def main(config: ProfilerConfig) -> None:
 # COMMAND ----------
 
 
-def validate_configuration(config: ProfilerConfig) -> None:
+def validate_configuration(config: Config) -> None:
     """
     Validate that all required configuration parameters are provided.
 
